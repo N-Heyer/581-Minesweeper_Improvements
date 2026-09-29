@@ -4,9 +4,11 @@
 # prologue
 # external sources: https://www.pygame.org/docs/
 # author: Emilia Davis and eliza m 
+# improvement author: Andrew Kruckemyer
 
 import pygame
 from minesweeper import Minesweeper
+import sys
 
 pygame.init()
 
@@ -18,8 +20,14 @@ board_scale = 4 # change scale of board
 # load font comic sans
 font = pygame.font.SysFont("Comic Sans MS", 8 * board_scale)
 
+# Added 9/28/2026 (Andrew Kruckemyer, with help from Claude): smaller font and a
+# strip below the board that shows the R / Esc controls
+hint_font = pygame.font.SysFont("Comic Sans MS", 5 * board_scale)
+bar_height = 40  # pixels of extra window height for the hint bar
+
 # load screen with given dimensions
-screen = pygame.display.set_mode(((board_size + label_size) * board_scale, (board_size + label_size) * board_scale))
+# Changed 9/28/2026 (Andrew Kruckemyer, with help from Claude): window is bar_height taller
+screen = pygame.display.set_mode(((board_size + label_size) * board_scale, (board_size + label_size) * board_scale + bar_height))
 
 # load sprite sheet and create list of sprites
 surface = pygame.image.load("SpriteSheet.png").convert()
@@ -51,6 +59,12 @@ def showBoard(surface):
         label = font.render(chr(ord('A') + col), False, (255, 255, 255)) # labels A-J, no anti-aliasing, white color
         surface.blit(label, (col * square_size * board_scale + label_size * board_scale, 0)) 
 
+    # Added 9/28/2026 (Andrew Kruckemyer, with help from Claude): controls hint bar
+    bar_top = (board_size + label_size) * board_scale  # first pixel row below the board
+    pygame.draw.rect(surface, (0, 0, 0), (0, bar_top, surface.get_width(), bar_height))
+    hint = hint_font.render("R: Restart  |  Esc: Menu", False, (255, 255, 255))
+    surface.blit(hint, (surface.get_width() // 2 - hint.get_width() // 2, bar_top + (bar_height - hint.get_height()) // 2))
+
 def DoSetup():
     running = True
     menu_running = True
@@ -60,7 +74,9 @@ def DoSetup():
     while menu_running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                running = False
+                # Added 9/28/2026 (Andrew Kruckemyer): close the window right away
+                pygame.quit()
+                sys.exit()
             if event.type == pygame.KEYDOWN:
                 is_valid = True
                 if event.key == pygame.K_RETURN:
@@ -87,22 +103,6 @@ def DoSetup():
         pygame.display.flip()
     return m
 
-
-# loop to run game
-#board = Minesweeper(m)   #creates Minesweeper object
-# nearly identical for loop to the one under while running
-for event in pygame.event.get():      
-    # ends program if user clicks X
-    if event.type == pygame.QUIT:
-        running = False
-    # separate left click check for initial board creation    
-    if event.type == pygame.MOUSEBUTTONDOWN:
-        col, row = pygame.mouse.get_pos() 
-
-        if event.button == 1:
-            print(f"left click : {row}, {col}")
-            board.createBoard(row, col) # constructs board object according to clicked space
-
 def MainGameplay():
     win = False
     running = True
@@ -111,7 +111,18 @@ def MainGameplay():
         for event in pygame.event.get():
             # ends program if user clicks X
             if event.type == pygame.QUIT:
-                running = False
+                # Added 9/28/2026 (Andrew Kruckemyer): close the window right away
+                pygame.quit()
+                sys.exit()
+
+            # Added 9/28/2026 (Andrew Kruckemyer): R restarts with
+            # the same mine count, Esc goes back to the start screen. The special return
+            # values are handled by the main loop at the bottom of the file.
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_r:
+                    return "restart"
+                if event.key == pygame.K_ESCAPE:
+                    return "menu"
 
             if event.type == pygame.MOUSEBUTTONDOWN:
                 # get mouse position
@@ -119,7 +130,9 @@ def MainGameplay():
                 # find board square that was clicked
                 col = (pos[0] - label_size * board_scale) // (square_size * board_scale) #adjustments for pixels
                 row = (pos[1] - label_size * board_scale) // (square_size * board_scale) #adjustments for pixels
-                if col < 0 or row < 0:
+                # Changed 9/28/2026 (Andrew Kruckemyer, with help from Claude): also ignore
+                # clicks past the last row/column, since the hint bar sits below the board
+                if col < 0 or row < 0 or row > 9 or col > 9:
                     continue
                 #col = pos[0] // (square_size * board_scale)
                 #row = pos[1] // (square_size * board_scale)
@@ -159,8 +172,9 @@ def EndScreen(win):
         for event in pygame.event.get(): # i copied this from above :3
             # ends program if user clicks X
             if event.type == pygame.QUIT:
-                running = False
-                shouldContinue = False
+                # Added 9/28/2026 (Andrew Kruckemyer): close the window right away
+                pygame.quit()
+                sys.exit()
             if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
                 shouldContinue = True
                 running = False
@@ -176,9 +190,19 @@ def EndScreen(win):
 
 
 # Loop to run the game
+# Changed 9/28/2026 (Andrew Kruckemyer, with help from Claude): mines is remembered between
+# games so R can restart with the same count. None means "show the setup screen".
+mines = None
 while True:
-    mines = DoSetup()
+    if mines is None:
+        mines = DoSetup()
     board = Minesweeper(mines)
     win = MainGameplay()
+    if win == "restart":
+        continue  # new board, same mine count
+    if win == "menu":
+        mines = None  # back to the setup screen
+        continue
     if not EndScreen(win):
         break
+    mines = None  # after the end screen, Enter still goes to setup like before
