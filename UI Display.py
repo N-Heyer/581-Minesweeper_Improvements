@@ -64,6 +64,9 @@ def showBoard(surface):
     pygame.draw.rect(surface, (0, 0, 0), (0, bar_top, surface.get_width(), bar_height))
     hint = hint_font.render("R: Restart  |  Esc: Menu", False, (255, 255, 255))
     surface.blit(hint, (surface.get_width() // 2 - hint.get_width() // 2, bar_top + (bar_height - hint.get_height()) // 2))
+    # Added 9/29/2026 (Khang Phan): flag remaining counter
+    flagCount = hint_font.render("Flags: " + str(board.m - board.flags), False, (255, 255, 255))
+    surface.blit(flagCount, (flagCount.get_width(), bar_top + (bar_height - flagCount.get_height()) // 2))
 
 def DoSetup():
     running = True
