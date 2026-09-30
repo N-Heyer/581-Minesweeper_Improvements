@@ -1,15 +1,15 @@
 # Prologue Comment
 # File: minesweeper.py
-# Description: Game model for a 10x10 Minesweeper board. Places mines after the
-#              first click so that cell is always safe, counts each cell's
-#              adjacent mines, and handles digging with flood fill, flagging,
-#              chording, and win/loss detection. No display or input code.
-# Inputs:  mine count (int, 10-20) at construction; row and column (0-9) for
-#          every move.
+# Description: Game model for a Minesweeper board of any size. Places mines
+#              after the first click so that cell is always safe, counts each
+#              cell's adjacent mines, and handles digging with flood fill,
+#              flagging, chording, and win/loss detection. No display or input
+#              code.
+# Inputs:  a difficulty object (rows, columns, mines) at construction; row and
+#          column inside that grid for every move.
 # Outputs: status codes from dig/flag/chord, a sprite index from display(), a
 #          bool from status(), a text state from state(), a count from
-#          remaining(). Raises ValueError on a bad mine count, IndexError on a
-#          coordinate off the board.
+#          remaining(). Raises IndexError on a coordinate off the board.
 # External sources: Game logic inherited from the Project 1 team. Claude Code
 # (Anthropic) was used as a tool under my direction - I set the scope of each
 # change, chose the approach, and reviewed the result. Directed by me, it audited
@@ -23,37 +23,32 @@
 
 import random
 
-# the board is a fixed 10x10 grid; these name the bounds the methods validate
-BOARD_SIZE = 10
-MIN_MINES = 10
-MAX_MINES = 20
-
 class Minesweeper:
-    # input:  mines - how many mines to place, an int from 10 to 20
-    # output: none; raises ValueError if mines is not an int in that range
-    # fields: m = mine count, flags = flags placed (never more than m),
-    #         _digs = safe cells still to uncover, _internal = solution grid
-    #         (-1 mine, 0-8 adjacent mines), _external = player view
-    #         (0 covered, 1 uncovered, 2 flagged), lost = True once a mine
-    #         has been uncovered
-    def __init__(self, mines = 15):
-        if not isinstance(mines, int) or isinstance(mines, bool):
-            raise ValueError(f"mine count must be an int, got {type(mines).__name__}")
-        if mines < MIN_MINES or mines > MAX_MINES:
-            raise ValueError(f"mine count must be {MIN_MINES}-{MAX_MINES}, got {mines}")
-        self.m = mines
+    # input:  difficultyObject - a difficulty preset exposing rows, columns, and
+    #         mines
+    # output: none
+    # fields: rows, columns = board dimensions, mines = mine count, flags =
+    #         flags placed (never more than mines), _digs = safe cells still to
+    #         uncover, _internal = solution grid (-1 mine, 0-8 adjacent mines),
+    #         _external = player view (0 covered, 1 uncovered, 2 flagged),
+    #         lost = True once a mine has been uncovered
+    def __init__(self, difficultyObject):
+        self.rows = difficultyObject.rows
+        self.columns = difficultyObject.columns
+        self.mines = difficultyObject.mines
         self.flags = 0
-        self._digs = BOARD_SIZE * BOARD_SIZE - mines
+        self._digs = self.rows * self.columns - self.mines
         self.is_constructed = False
         self.lost = False
-        self._internal = [[0 for c in range(BOARD_SIZE)] for r in range(BOARD_SIZE)]
-        self._external = [[0 for c in range(BOARD_SIZE)] for r in range(BOARD_SIZE)]
+        self._internal = [[0 for _ in range(self.columns)] for _ in range(self.rows)]
+        self._external = [[0 for _ in range(self.columns)] for _ in range(self.rows)]
+        self.isPlayerTurn = True
 
     # input:  row, col - a coordinate pair to check
     # output: none; raises IndexError if either falls outside the board
     def _checkBounds(self, row, col):
-        if not 0 <= row < BOARD_SIZE or not 0 <= col < BOARD_SIZE:
-            raise IndexError(f"({row}, {col}) is outside the {BOARD_SIZE}x{BOARD_SIZE} board")
+        if not 0 <= row < self.rows or not 0 <= col < self.columns:
+            raise IndexError(f"({row}, {col}) is outside the {self.rows}x{self.columns} board")
 
     # Places the mines and digs the starting space. Does nothing if the board has
     # already been built, and clears a flag on the starting space first so that
@@ -68,15 +63,15 @@ class Minesweeper:
             self._external[s_row][s_col] = 0
             self.flags -= 1
         c = 0
-        while c < self.m:
-            row = random.randint(0, BOARD_SIZE - 1)
-            col = random.randint(0, BOARD_SIZE - 1)
+        while c < self.mines:
+            row = random.randint(0, self.rows - 1)
+            col = random.randint(0, self.columns - 1)
             if self._internal[row][col] < 0 or (row == s_row and col == s_col):
                 pass
             else:
                 self._internal[row][col] = -1
-                for i in range(max(0, row - 1), min(BOARD_SIZE, row + 2)):
-                    for j in range(max(0, col - 1), min(BOARD_SIZE, col + 2)):
+                for i in range(max(0, row - 1), min(self.rows, row + 2)):
+                    for j in range(max(0, col - 1), min(self.columns, col + 2)):
                         if self._internal[i][j] != -1:
                             self._internal[i][j] += 1
                 c += 1
@@ -99,8 +94,8 @@ class Minesweeper:
                 return 0
             else:
                 if self._internal[row][col] == 0:
-                    for i in range(max(0, row - 1), min(BOARD_SIZE, row + 2)):
-                        for j in range(max(0, col - 1), min(BOARD_SIZE, col + 2)):
+                    for i in range(max(0, row - 1), min(self.rows, row + 2)):
+                        for j in range(max(0, col - 1), min(self.columns, col + 2)):
                             self.dig(i, j)
                 self._digs -= 1
                 return 1
@@ -119,7 +114,7 @@ class Minesweeper:
             self.flags -= 1
             return 1
         else:
-            if self.flags >= self.m:
+            if self.flags >= self.mines:
                 return 2
             self._external[row][col] = 2
             self.flags += 1
@@ -128,7 +123,7 @@ class Minesweeper:
     # input:  none
     # output: how many flags the player still has to place, never negative
     def remaining(self):
-        return max(0, self.m - self.flags)
+        return max(0, self.mines - self.flags)
 
     # Digs every covered neighbor of an uncovered number, but only when that
     # number equals the count of flags around it.
@@ -141,15 +136,15 @@ class Minesweeper:
         if displayVal <= 0:
             return 2
         flagCount = 0
-        for r in range(max(0, row - 1), min(BOARD_SIZE, row + 2)):
-            for c in range(max(0, col - 1), min(BOARD_SIZE, col + 2)):
+        for r in range(max(0, row - 1), min(self.rows, row + 2)):
+            for c in range(max(0, col - 1), min(self.columns, col + 2)):
                 if self.display(r, c) == 0:
                     flagCount += 1
         if flagCount != displayVal:
             return 2
         toReturn = 1
-        for r in range(max(0, row - 1), min(BOARD_SIZE, row + 2)):
-            for c in range(max(0, col - 1), min(BOARD_SIZE, col + 2)):
+        for r in range(max(0, row - 1), min(self.rows, row + 2)):
+            for c in range(max(0, col - 1), min(self.columns, col + 2)):
                 if self.display(r, c) == -3:
                     toReturn = 1 if self.dig(r, c) > 0 and toReturn == 1 else 0
         return toReturn
@@ -201,7 +196,7 @@ class Minesweeper:
     # input:  none
     # output: none; every mine cell becomes uncovered in the player's view
     def revealAllMines(self):
-        for row in range(BOARD_SIZE):
-            for col in range(BOARD_SIZE):
+        for row in range(self.rows):
+            for col in range(self.columns):
                 if self._internal[row][col] == -1:
                     self._external[row][col] = 1
