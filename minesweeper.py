@@ -15,13 +15,18 @@
 # change, chose the approach, and reviewed the result. Directed by me, it audited
 # this file for bugs and implemented the fixes I specified: bounds and mine-count
 # validation, the createBoard guards, the flag cap, remaining(), revealAllMines(),
-# state(), and this prologue.
+# state(), and this prologue. In a later pass, also under my direction, it fixed
+# the recursive flood fill, the missing aiLevel check, status() reporting a win
+# on a lost board, and added getPlayerView().
 # Author: Zachary McCauley; improvements by Jaycob Campos
 # Created: Sept 13 2026
 
 # use from minesweeper import Minesweeper
 
 import random
+from ai_interactive_mode import easy_mode
+from ai_auto_solve_mode import getMovesForAutoSolve
+from ai_interactive_mode import getAiMoveInteractive
 
 class Minesweeper:
     # input:  difficultyObject - a difficulty preset exposing rows, columns, and
@@ -32,17 +37,25 @@ class Minesweeper:
     #         uncover, _internal = solution grid (-1 mine, 0-8 adjacent mines),
     #         _external = player view (0 covered, 1 uncovered, 2 flagged),
     #         lost = True once a mine has been uncovered
-    def __init__(self, difficultyObject):
+    def __init__(self, difficultyObject,aiLevel):
+        if aiLevel not in (1, 2, 3):
+            raise ValueError(f"AI level must be 1, 2, or 3, got {aiLevel}")
+        self.gameDifficultyObject = difficultyObject
+        self.aiLevel = aiLevel
+
         self.rows = difficultyObject.rows
         self.columns = difficultyObject.columns
+
         self.mines = difficultyObject.mines
         self.flags = 0
         self._digs = self.rows * self.columns - self.mines
-        self.is_constructed = False
-        self.lost = False
+
         self._internal = [[0 for _ in range(self.columns)] for _ in range(self.rows)]
         self._external = [[0 for _ in range(self.columns)] for _ in range(self.rows)]
-        self.isPlayerTurn = True
+
+        self.is_constructed = False
+        self.lost = False
+
 
     # input:  row, col - a coordinate pair to check
     # output: none; raises IndexError if either falls outside the board
@@ -93,18 +106,27 @@ class Minesweeper:
                 self.lost = True
                 return 0
             else:
-                if self._internal[row][col] == 0:
-                    for i in range(max(0, row - 1), min(self.rows, row + 2)):
-                        for j in range(max(0, col - 1), min(self.columns, col + 2)):
-                            self.dig(i, j)
                 self._digs -= 1
+                toCheck = []
+                if self._internal[row][col] == 0:
+                    toCheck.append((row, col))
+                while len(toCheck) > 0:
+                    r, c = toCheck.pop()
+                    for i in range(max(0, r - 1), min(self.rows, r + 2)):
+                        for j in range(max(0, c - 1), min(self.columns, c + 2)):
+                            if self._external[i][j] == 0:
+                                self._external[i][j] = 1
+                                self._digs -= 1
+                                if self._internal[i][j] == 0:
+                                    toCheck.append((i, j))
                 return 1
 
     # Places or removes a flag. Flagging before createBoard() is allowed.
     # input:  row, col - the cell to flag or unflag
-    # output: 2 if nothing happened (cell already uncovered, or every flag is
-    #         already placed), 1 if a flag was removed, 0 if one was placed;
-    #         raises IndexError if the coordinates are off the board
+    # output: 2 if nothing happened - either the cell is already uncovered, or
+    #         every flag is already placed, so a caller that needs to tell those
+    #         apart must check remaining() as well; 1 if a flag was removed, 0
+    #         if one was placed; raises IndexError if coordinates are off board
     def flag(self, row, col):
         self._checkBounds(row, col)
         if self._external[row][col] == 1:
@@ -170,10 +192,10 @@ class Minesweeper:
 
     # Should be called after every dig.
     # input:  none
-    # output: True once every safe cell is uncovered, False otherwise. False does
-    #         not mean the player lost - use state() for that.
+    # output: True once every safe cell is uncovered and no mine has been hit.
+    #         False does not mean the player lost - use state() for that.
     def status(self):
-        if self._digs == 0:
+        if self._digs == 0 and not self.lost:
             return True
         else:
             return False
@@ -186,10 +208,11 @@ class Minesweeper:
     def state(self):
         if self.lost:
             return "Game Over: Loss"
-        elif self._digs == 0:
+
+        if self._digs == 0:
             return "Victory"
-        else:
-            return "Playing"
+
+        return "Playing"
 
     # Uncovers every mine, for the caller to draw after a loss. Leaves _digs
     # alone, so status() cannot report a win as a side effect.
@@ -200,3 +223,30 @@ class Minesweeper:
             for col in range(self.columns):
                 if self._internal[row][col] == -1:
                     self._external[row][col] = 1
+
+
+    # The grid the AI reasons from. _external only says covered, uncovered or
+    # flagged, which is not enough to work out where the mines are, so this
+    # hands over display() for every cell instead - the adjacent mine counts
+    # included. Still never exposes _internal.
+    # input:  none
+    # output: a rows x columns grid of display() values
+    def getPlayerView(self):
+        return [[self.display(row, col) for col in range(self.columns)] for row in range(self.rows)]
+
+    # Asks the AI for one move, in the mode where the player and the AI take
+    # turns. Passes the player's view, never the solution grid.
+    # input:  none
+    # output: the AI's next (row, column) move, or None when it has none
+    def getAIMove(self):
+        return getAiMoveInteractive(self.getPlayerView(), self.aiLevel, self.gameDifficultyObject)
+
+    # Asks the AI to play the board out on its own. Hands over this board so the
+    # AI can dig as it goes and see what each move reveals; a list worked out up
+    # front cannot do that, because every move after the first depends on the
+    # numbers the earlier ones uncovered.
+    # input:  none
+    # output: the head Node of a queue of the (row, column) moves the AI played,
+    #         or None when it had no moves
+    def autoSolve(self):
+        return getMovesForAutoSolve(self, self.aiLevel, self.gameDifficultyObject)
