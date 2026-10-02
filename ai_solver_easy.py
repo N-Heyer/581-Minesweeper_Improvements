@@ -21,7 +21,6 @@ def easy_mode(playerView, rows, columns):
 
     for row in range(rows):
         for column in range(columns):
-            # TODO: read code and understand it
             if playerView[row][column] == -3:
                 possibleTiles.append((row, column))
 
