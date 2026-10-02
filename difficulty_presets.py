@@ -21,7 +21,6 @@ class Difficulty:
     # output: none
     # fields: rows, columns, mines - read directly by Minesweeper.__init__
     def __init__(self, rows, columns, mineCount):
-        # TODO: read code and understand it
         if mineCount < 1 or mineCount >= rows * columns:
             raise ValueError(f"mine count must be 1-{rows * columns - 1} on a {rows}x{columns} board, got {mineCount}")
         self.rows = rows
