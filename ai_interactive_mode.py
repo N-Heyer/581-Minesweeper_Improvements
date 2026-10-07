@@ -13,6 +13,8 @@
 # Created: Sept 29 2026
 
 from ai_solver_easy import easy_mode
+from ai_solver_medium import medium_mode
+from ai_solver_hard import hard_mode
 
 # Picks the AI's next single move, for the mode where the player and the AI take
 # turns. Levels 2 and 3 are not written yet.
@@ -26,9 +28,17 @@ def getAiMoveInteractive(playerView, aiSkill, gameDifficultyObject):
         case 1:
             return easy_mode(playerView, gameDifficultyObject.rows, gameDifficultyObject.columns)
         case 2:
-            return
+            return medium_mode(
+                playerView,
+                gameDifficultyObject.rows,
+                gameDifficultyObject.columns
+            )
         case 3:
-            return
+            return hard_mode(
+                playerView,
+                gameDifficultyObject.rows,
+                gameDifficultyObject.columns
+            )
         case _:
             raise ValueError(f"unknown AI: {aiSkill}")
 
