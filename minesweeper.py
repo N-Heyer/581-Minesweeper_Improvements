@@ -1,7 +1,8 @@
 # Prologue Comment
 # File: minesweeper.py
 # Description: Game model for a Minesweeper board of any size. Places mines
-#              after the first click so that cell is always safe, counts each
+#              after the first click, keeping it and its neighbors mine-free
+#              to trigger an area reveal. Counts each
 #              cell's adjacent mines, and handles digging with flood fill,
 #              flagging, chording, and win/loss detection. No display or input
 #              code.
@@ -25,7 +26,9 @@
 # board in a single call. In a fifth pass, to my direction, it read this file's
 # comments back against the code and corrected the ones the earlier passes had
 # left out of step with it; that pass changed comments only, no code.
-# Author: Zachary McCauley; improvements by Jaycob Campos
+# First-click clearing updated Oct 7, 2026 by Andrew Kruckemyer with OpenAI
+# Codex assistance: protect neighboring cells and validate placement capacity.
+# Author: Zachary McCauley; improvements by Jaycob Campos and Andrew Kruckemyer
 # Created: Sept 13 2026
 
 # use from minesweeper import Minesweeper
@@ -46,8 +49,7 @@ class Minesweeper:
     #         mines; aiLevel - which AI the board hands its AI calls to, 1-3
     # output: none; raises ValueError if aiLevel is not 1, 2, or 3. The mine count
     #         is not checked here - Difficulty checks it when the preset is built,
-    #         so a hand-rolled object with mines >= rows * columns would leave
-    #         createBoard spinning for a free space that does not exist
+    #         and createBoard checks that they fit outside the first-click area
     # fields: gameDifficultyObject, aiLevel = held only to hand to the AI
     #         modules, rows, columns = board dimensions, mines = mine count,
     #         flags = flags placed (never more than mines), _digs = safe cells
@@ -82,27 +84,33 @@ class Minesweeper:
             raise IndexError(f"({row}, {col}) is outside the {self.rows}x{self.columns} board")
 
     # Places the mines and digs the starting space. Does nothing if the board has
-    # already been built, and clears a flag on the starting space first so that
-    # space is always safely uncovered. Only a caller that calls this itself can
-    # land on a flagged starting space, because dig() leaves a flagged cell alone
-    # rather than starting the board on it.
+    # already been built, and removes all flags placed before the first reveal.
+    # The starting cell and its neighbors
+    # are mine-free, so the first dig triggers the existing flood fill.
     # input:  s_row, s_col - the space the player clicked first, never a mine
     # output: the status code from digging that starting space - 1 once it is
     #         uncovered, or 2 if the board was already built and nothing changed.
     #         Never 0, because the starting space is never a mine; raises
-    #         IndexError if the coordinates are off the board
+    #         IndexError if the coordinates are off the board, or ValueError
+    #         if the mines cannot fit outside the protected starting area
     def createBoard(self, s_row, s_col):
         self._checkBounds(s_row, s_col)
         if self.is_constructed:
             return 2
-        if self._external[s_row][s_col] == 2:
-            self._external[s_row][s_col] = 0
-            self.flags -= 1
+        # Protect the first cell's 3x3 neighborhood, clipped at board edges.
+        # Reject impossible configurations before changing any board state.
+        safe_rows = min(self.rows, s_row + 2) - max(0, s_row - 1)
+        safe_cols = min(self.columns, s_col + 2) - max(0, s_col - 1)
+        if self.mines > self.rows * self.columns - safe_rows * safe_cols:
+            raise ValueError("Too many mines to leave the first-click area clear")
+        # Pre-game flags must not block the first opening.
+        self.clearAllFlags()
         c = 0
         while c < self.mines:
             row = random.randint(0, self.rows - 1)
             col = random.randint(0, self.columns - 1)
-            if self._internal[row][col] < 0 or (row == s_row and col == s_col):
+            if (self._internal[row][col] < 0
+                    or (abs(row - s_row) <= 1 and abs(col - s_col) <= 1)):
                 pass
             else:
                 self._internal[row][col] = -1
@@ -116,8 +124,8 @@ class Minesweeper:
 
     # Uncovers a cell, flood filling outward when it has no adjacent mines. Builds
     # the board around this cell when it is the first one dug, so a caller never
-    # has to call createBoard() itself; a flagged cell is left alone and does not
-    # start the board, which keeps flagging before the first dig meaningful.
+    # has to call createBoard() itself. The first reveal clears pre-game flags,
+    # even when that first reveal is on a flagged cell. Once built, flags block digs.
     # The flood fill steps over flagged cells, so a flag left on a safe cell keeps
     # that cell covered and still counted against the win until the flag comes off.
     # input:  row, col - the cell to dig
@@ -126,12 +134,12 @@ class Minesweeper:
     #         raises IndexError if the coordinates are off the board
     def dig(self, row, col):
         self._checkBounds(row, col)
-        if self._external[row][col] != 0:
-            return 2
-        elif not self.is_constructed:
+        if not self.is_constructed:
             # createBoard sets is_constructed before it digs, so this hands the
             # work off once and the dig it makes comes straight back here.
             return self.createBoard(row, col)
+        elif self._external[row][col] != 0:
+            return 2
         else:
             self._external[row][col] = 1
             if self._internal[row][col] == -1:

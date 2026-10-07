@@ -235,18 +235,14 @@ def MainGameplay(mode):
                 continue
             before = board.getPlayerView()
             if event.button == 1:
-                if not board.is_constructed:
-                    # Flagged cells cannot start the board or consume a turn.
-                    if board.display(row, col) == 0:
-                        continue
-                    board.createBoard(row, col)
-                else:
-                    if board.dig(row, col) == 2:
-                        board.chord(row, col)
+                # The backend clears pre-game flags and builds the first opening.
+                if board.dig(row, col) == 2:
+                    board.chord(row, col)
             elif event.button == 3:
                 board.flag(row, col)
             # A successful dig, chord, or flag action gives the AI one turn.
-            if (mode == "interactive" and before != board.getPlayerView()
+            if (mode == "interactive" and board.is_constructed
+                    and before != board.getPlayerView()
                     and board.state() == "Playing"):
                 ai_pending = True
                 next_ai_move = pygame.time.get_ticks() + 600
