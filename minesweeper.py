@@ -1,7 +1,8 @@
 # Prologue Comment
 # File: minesweeper.py
 # Description: Game model for a Minesweeper board of any size. Places mines
-#              after the first click so that cell is always safe, counts each
+#              after the first click, keeping it and its neighbors mine-free
+#              to trigger an area reveal. Counts each
 #              cell's adjacent mines, and handles digging with flood fill,
 #              flagging, chording, and win/loss detection. No display or input
 #              code.
@@ -17,26 +18,45 @@
 # validation, the createBoard guards, the flag cap, remaining(), revealAllMines(),
 # state(), and this prologue. In a later pass, also under my direction, it fixed
 # the recursive flood fill, the missing aiLevel check, status() reporting a win
-# on a lost board, and added getPlayerView().
-# Author: Zachary McCauley; improvements by Jaycob Campos
+# on a lost board, and added getPlayerView(). In a third pass, again under my
+# direction, it moved first-click safety behind dig(), which now builds the board
+# around the first cell dug, so the UI and the AI no longer have to call
+# createBoard() themselves before their first move. In a fourth pass, to a spec
+# I wrote, it added clearAllFlags(), so the UI can take every flag back off the
+# board in a single call. In a fifth pass, to my direction, it read this file's
+# comments back against the code and corrected the ones the earlier passes had
+# left out of step with it; that pass changed comments only, no code.
+# First-click clearing updated Oct 7, 2026 by Andrew Kruckemyer with OpenAI
+# Codex assistance: protect neighboring cells and validate placement capacity.
+# Author: Zachary McCauley; improvements by Jaycob Campos and Andrew Kruckemyer
 # Created: Sept 13 2026
 
 # use from minesweeper import Minesweeper
 
 import random
-from ai_interactive_mode import easy_mode
+# The AI is reached through the two calls below - one move at a time for the
+# turn-based mode, the whole run for auto-solve. Both are handed getPlayerView(),
+# never _internal, so the AI only ever sees what the player can see.
+from ai_interactive_mode import easy_mode  # unused here; easy_mode is called by ai_interactive_mode
 from ai_auto_solve_mode import getMovesForAutoSolve
 from ai_interactive_mode import getAiMoveInteractive
 
+# One Minesweeper board: the solution grid, the player's view of it, and every
+# move that can be made on it. Knows nothing about how it is drawn or clicked -
+# a caller digs, flags and chords by coordinate and reads the returned code back.
 class Minesweeper:
     # input:  difficultyObject - a difficulty preset exposing rows, columns, and
-    #         mines
-    # output: none
-    # fields: rows, columns = board dimensions, mines = mine count, flags =
-    #         flags placed (never more than mines), _digs = safe cells still to
-    #         uncover, _internal = solution grid (-1 mine, 0-8 adjacent mines),
-    #         _external = player view (0 covered, 1 uncovered, 2 flagged),
-    #         lost = True once a mine has been uncovered
+    #         mines; aiLevel - which AI the board hands its AI calls to, 1-3
+    # output: none; raises ValueError if aiLevel is not 1, 2, or 3. The mine count
+    #         is not checked here - Difficulty checks it when the preset is built,
+    #         and createBoard checks that they fit outside the first-click area
+    # fields: gameDifficultyObject, aiLevel = held only to hand to the AI
+    #         modules, rows, columns = board dimensions, mines = mine count,
+    #         flags = flags placed (never more than mines), _digs = safe cells
+    #         still to uncover, _internal = solution grid (-1 mine, 0-8 adjacent
+    #         mines), _external = player view (0 covered, 1 uncovered, 2
+    #         flagged), is_constructed = False until the mines go down on the
+    #         first dig, lost = True once a mine has been uncovered
     def __init__(self, difficultyObject,aiLevel):
         if aiLevel not in (1, 2, 3):
             raise ValueError(f"AI level must be 1, 2, or 3, got {aiLevel}")
@@ -64,22 +84,33 @@ class Minesweeper:
             raise IndexError(f"({row}, {col}) is outside the {self.rows}x{self.columns} board")
 
     # Places the mines and digs the starting space. Does nothing if the board has
-    # already been built, and clears a flag on the starting space first so that
-    # space is always safely uncovered.
+    # already been built, and removes all flags placed before the first reveal.
+    # The starting cell and its neighbors
+    # are mine-free, so the first dig triggers the existing flood fill.
     # input:  s_row, s_col - the space the player clicked first, never a mine
-    # output: none; raises IndexError if the coordinates are off the board
+    # output: the status code from digging that starting space - 1 once it is
+    #         uncovered, or 2 if the board was already built and nothing changed.
+    #         Never 0, because the starting space is never a mine; raises
+    #         IndexError if the coordinates are off the board, or ValueError
+    #         if the mines cannot fit outside the protected starting area
     def createBoard(self, s_row, s_col):
         self._checkBounds(s_row, s_col)
         if self.is_constructed:
-            return
-        if self._external[s_row][s_col] == 2:
-            self._external[s_row][s_col] = 0
-            self.flags -= 1
+            return 2
+        # Protect the first cell's 3x3 neighborhood, clipped at board edges.
+        # Reject impossible configurations before changing any board state.
+        safe_rows = min(self.rows, s_row + 2) - max(0, s_row - 1)
+        safe_cols = min(self.columns, s_col + 2) - max(0, s_col - 1)
+        if self.mines > self.rows * self.columns - safe_rows * safe_cols:
+            raise ValueError("Too many mines to leave the first-click area clear")
+        # Pre-game flags must not block the first opening.
+        self.clearAllFlags()
         c = 0
         while c < self.mines:
             row = random.randint(0, self.rows - 1)
             col = random.randint(0, self.columns - 1)
-            if self._internal[row][col] < 0 or (row == s_row and col == s_col):
+            if (self._internal[row][col] < 0
+                    or (abs(row - s_row) <= 1 and abs(col - s_col) <= 1)):
                 pass
             else:
                 self._internal[row][col] = -1
@@ -89,16 +120,25 @@ class Minesweeper:
                             self._internal[i][j] += 1
                 c += 1
         self.is_constructed = True
-        self.dig(s_row, s_col)
+        return self.dig(s_row, s_col)
 
-    # Uncovers a cell, flood filling outward when it has no adjacent mines.
+    # Uncovers a cell, flood filling outward when it has no adjacent mines. Builds
+    # the board around this cell when it is the first one dug, so a caller never
+    # has to call createBoard() itself. The first reveal clears pre-game flags,
+    # even when that first reveal is on a flagged cell. Once built, flags block digs.
+    # The flood fill steps over flagged cells, so a flag left on a safe cell keeps
+    # that cell covered and still counted against the win until the flag comes off.
     # input:  row, col - the cell to dig
     # output: 2 if nothing changed (already uncovered or flagged), 1 if the cell
     #         was uncovered, 0 if it held a mine and the player lost;
     #         raises IndexError if the coordinates are off the board
     def dig(self, row, col):
         self._checkBounds(row, col)
-        if self._external[row][col] != 0:
+        if not self.is_constructed:
+            # createBoard sets is_constructed before it digs, so this hands the
+            # work off once and the dig it makes comes straight back here.
+            return self.createBoard(row, col)
+        elif self._external[row][col] != 0:
             return 2
         else:
             self._external[row][col] = 1
@@ -147,11 +187,34 @@ class Minesweeper:
     def remaining(self):
         return max(0, self.mines - self.flags)
 
+    # Takes every flag back off the board, for a caller that wants to start the
+    # flagging over without disturbing the game itself. Only flagged cells are
+    # touched, so nothing is uncovered and no win or loss can come of it. Sets
+    # the flag count straight to zero rather than counting down one flag at a
+    # time, so the count can never drift out of step with the player's view.
+    # Safe to call before the board is built, on a board with no flags on it,
+    # and after a loss.
+    # input:  none
+    # output: how many flags were removed, 0 when there were none to remove
+    def clearAllFlags(self):
+        cleared = 0
+        for row in range(self.rows):
+            for col in range(self.columns):
+                if self._external[row][col] == 2:
+                    self._external[row][col] = 0
+                    cleared += 1
+        self.flags = 0
+        return cleared
+
     # Digs every covered neighbor of an uncovered number, but only when that
     # number equals the count of flags around it.
     # input:  row, col - the uncovered number to chord from
-    # output: 2 if nothing happened, 1 if progress was made, 0 if the player hit
-    #         a mine; raises IndexError if the coordinates are off the board
+    # output: 0 if a dug neighbor held a mine, 2 if the chord was refused - the
+    #         cell is covered, flagged or a zero, or the flags around it do not
+    #         match its number - and 1 otherwise. 1 means the chord went through,
+    #         not that a cell changed: a number whose neighbors are all already
+    #         uncovered or flagged returns 1 having dug nothing;
+    #         raises IndexError if the coordinates are off the board
     def chord(self, row, col):
         self._checkBounds(row, col)
         displayVal = self.display(row, col)
@@ -193,7 +256,9 @@ class Minesweeper:
     # Should be called after every dig.
     # input:  none
     # output: True once every safe cell is uncovered and no mine has been hit.
-    #         False does not mean the player lost - use state() for that.
+    #         False does not mean the player lost - use state() for that. A flag
+    #         left on a safe cell keeps that cell covered, so the win does not
+    #         land until the flag comes off.
     def status(self):
         if self._digs == 0 and not self.lost:
             return True
@@ -204,7 +269,8 @@ class Minesweeper:
     # callers compare against True.
     # input:  none
     # output: "Game Over: Loss" once a mine has been uncovered, "Victory" once
-    #         every safe cell is uncovered, otherwise "Playing"
+    #         every safe cell is uncovered, otherwise "Playing". The loss is
+    #         checked first, so a board that was lost never reads as a win.
     def state(self):
         if self.lost:
             return "Game Over: Loss"
