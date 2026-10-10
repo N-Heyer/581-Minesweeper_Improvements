@@ -7,4 +7,5 @@
 | 10/04 | Andrew | Add ai difficulty menu           | Coding        | 2     |
 | 10/06 | Nick   | Added new board sizing/difficulty | Coding       | 2     |
 | 10/06 | Nick   | Added new user specified mine count  | Coding       | 2     |
+| 10/07 | Lydia  | Implemented hard and medium AI solvers | Coding      | 3     |
 
