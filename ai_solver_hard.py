@@ -111,5 +111,5 @@ def hard_mode(playerView, rows, columns):
     if random_move is None:
         return None
 
-    row, column = random_move
-    return ("dig", row, column)
+    action, row, column = random_move
+    return (action, row, column)

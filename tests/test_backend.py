@@ -12,49 +12,13 @@ External sources: Original code with assistance by OpenAI
 Author: Khang Phan
 Created: [Oct 5 2026]
 """
+import pytest
 
 from minesweeper import Minesweeper
 from difficulty_presets import BEGINNER
 from difficulty_presets import INTERMEDIATE
 from difficulty_presets import EXPERT
-import pytest
-
-## HELPER FUNCTIONS
-
-def neighbors(board, row, col):
-    # Identifies the surrounding neighbors of the passed in cell
-    
-    neighbors = []
-
-    # identify all cells in 3x3 area, bounded by board dimensions
-    for i in range(max(0, row-1), min(board.rows, row+2)):
-        for j in range(max(0, col-1), min(board.columns, col+2)):
-
-            # exclude center cell
-            if i != row or j != col:
-                neighbors.append((i, j))
-    return neighbors
-
-def make_custom_board(difficulty, aiLevel, mineList):
-    # Sets a custom board to test specific functions
-
-    board = Minesweeper(difficulty, aiLevel)
-    
-    for row, col in mineList:
-        # set custom mine positions
-        board._internal[row][col] = -1
-
-        # increment neighboring cells' adjacency counts
-        for i in range(max(0, row-1), min(board.rows, row+2)):
-            for j in range(max(0, col-1), min(board.columns, col+2)):
-                if board._internal[i][j] != -1:
-                    board._internal[i][j] += 1
-    board.is_constructed = True
-
-    return board
-
-
-## TEST CASES
+from test_helpers import neighbors, make_custom_board
 
 @pytest.mark.parametrize("difficulty, aiLevel, rows, columns, mines", [
     (BEGINNER, 1, 10, 10, 10),
@@ -103,7 +67,6 @@ def test_invalid_init(difficulty, aiLevel):
 @pytest.mark.parametrize("difficulty, row, col", [
     (BEGINNER, 10, 0),
     (BEGINNER, 0, 10),
-    # (BEGINNER, 5.5, 0),
     (BEGINNER, -1, 0),
     (INTERMEDIATE, 16, 0),
     (EXPERT, 29, 15),
@@ -314,7 +277,7 @@ def test_chording(row, col, mineList):
             assert board._external[r][c] == 1
 
 @pytest.mark.parametrize("row, col, mineList, flagList", [
-    (4, 3, [(4,2), (5,3), (3,4)],
+    (4, 3, [(4,2), (5,3), (3,4), (0,0)],
         [(4,2), (5,3), (3,4), (5,2)]),
     (4, 3, [(4,2), (5,3), (3,4)],
         [(4,2), (5,3)])
@@ -436,3 +399,21 @@ def test_reveal_all_mines():
         for col in range(board.columns):
             if board._internal[row][col] == -1: # mine
                 assert board._external[row][col] == 1   # revealed
+
+def test_clear_all_flags():
+    # test clearAllFlags() method
+
+    board = Minesweeper(BEGINNER, 1)
+
+    for i in range(board.columns):
+        board.flag(i, 0)
+    assert board.flags == 10
+    assert board.remaining() == 0
+    for i in range(board.columns):
+        assert board._external[i][0] == 2
+
+    assert board.clearAllFlags() == 10
+    assert board.flags == 0
+    assert board.remaining() == 10
+    for i in range(board.columns):
+        assert board._external[i][0] == 0

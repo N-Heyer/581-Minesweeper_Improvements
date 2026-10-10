@@ -68,9 +68,14 @@ def getMovesForAutoSolve(board, aiSkill, gameDifficultyObject):
         if move is None:
             break
 
-        queue.enqueue(move)
+        action, row, col = move
+        if action == "flag":
+            if board.flag(row, col) != 0:
+                break
+        elif action == "dig":
+            if board.dig(row, col) == 2:
+                break
 
-        if board.dig(move[0], move[1]) == 2:
-            break
+        queue.enqueue(move)
 
     return queue.head

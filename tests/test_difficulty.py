@@ -12,9 +12,9 @@ External sources: Original code with assistance by OpenAI
 Author: Khang Phan
 Created: [Oct 8 2026]
 """
+import pytest
 
 from difficulty_presets import Difficulty
-import pytest
 
 @pytest.mark.parametrize("rows, columns, mines", [
     (10, 10, 1),
