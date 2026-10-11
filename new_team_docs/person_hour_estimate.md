@@ -28,3 +28,34 @@ To produce an hour estimate for planning, we mapped story points to hours at a c
 | **Total**               | **12**       | **18.0**   |
 
 Hours are story points × 1.5. Backend and UI were sized as medium (5). Integration / QA / docs was sized as small (2).
+
+## Actual vs Estimate
+
+Actuals are the entries in `person_hours_log.md` through 10/10/2026, sorted into the three areas
+above.
+
+| Area                    | Est. hours | Actual hours | Variance |
+|-------------------------|------------|--------------|----------|
+| Backend logic           | 7.5        | 5.0          | −2.5     |
+| UI and user events      | 7.5        | 7.5          | 0.0      |
+| Integration / QA / docs | 3.0        | 9.5          | +6.5     |
+| **Total**               | **18.0**   | **22.0**     | **+4.0** |
+
+How the log maps onto each area:
+
+- **Backend logic** — back-end debugging (2.0) and the medium and hard AI solvers (3.0).
+- **UI and user events** — R/Esc keys (1.5), the AI settings menu (2.0), board sizing and the
+  user-specified mine count (4.0).
+- **Integration / QA / docs** — the meeting log (0.5), this folder's documentation (3.0), and
+  the pytest suite (6.0).
+
+### Why the estimate missed
+
+- **Integration / QA / docs was sized far too small.** It was given 2 points (3.0 hours) and
+  took 9.5. The 83-case pytest suite alone was 6.0 hours and had no line in the estimate.
+- **The AI solvers were never sized separately.** They were folded into "backend logic," which
+  is why that area reads as under budget while the total went over.
+- **Documentation was bundled with QA.** The two have different owners on this team and should
+  be sized apart next sprint.
+
+Totals are 22.0 hours against an 18.0-hour estimate: **22% over**.
