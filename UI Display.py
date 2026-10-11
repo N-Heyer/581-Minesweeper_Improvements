@@ -17,6 +17,7 @@
 import pygame
 from minesweeper import Minesweeper
 from difficulty_presets import Difficulty
+from ai_interactive_mode import applyAiMove
 import sys
 
 pygame.init()
@@ -109,11 +110,16 @@ def showBoard(surface):
     status = hint_font.render(game_status, True, (255, 255, 255))
     surface.blit(status, (12, bar_top + 42))
 
-# Menu choices map to backend AI levels. Medium and Hard stay disabled until
-# their solvers are implemented; board mine count is independent of AI skill.
+# Menu choices map to backend AI levels; mine count is independent of AI skill.
+# Medium/Hard integration added Oct 7, 2026 with OpenAI Codex assistance.
 MODE_OPTIONS = [("player", "Player only"), ("interactive", "Interactive AI"),
                 ("auto", "Auto-solve")]
-AI_OPTIONS = [(1, "Easy"), (2, "Medium (soon)"), (3, "Hard (soon)")]
+AI_OPTIONS = [(1, "Easy"), (2, "Medium"), (3, "Hard")]
+AI_DESCRIPTIONS = {
+    1: "Easy opens random covered, unflagged cells.",
+    2: "Medium uses nearby numbers to flag mines and open cells.",
+    3: "Hard adds the 1-2-1 pattern to Medium's rules.",
+}
 
 
 def drawButton(rect, label, selected=False, enabled=True):
@@ -165,7 +171,7 @@ def DoSetup():
                         mode = value
                 if mode != "player":
                     for rect, (value, _) in zip(ai_buttons, AI_OPTIONS):
-                        if rect.collidepoint(event.pos) and value == 1:
+                        if rect.collidepoint(event.pos):
                             ai_level = value
                 start_requested = start_button.collidepoint(event.pos)
             if start_requested:
@@ -190,15 +196,15 @@ def DoSetup():
         descriptions = {
             "player": "Play the board yourself without AI turns.",
             "interactive": "You and the AI take turns on the same board.",
-            "auto": "Watch the AI open one cell at a time.",
+            "auto": "Watch the AI uncover cells and flag mines.",
         }
         screen.blit(hint_font.render(descriptions[mode], True, (200, 210, 225)), (32, 380))
         for rect, (value, label) in zip(ai_buttons, AI_OPTIONS):
             drawButton(rect, label, mode != "player" and ai_level == value,
-                       enabled=mode != "player" and value == 1)
-        detail = "Easy opens random covered, unflagged cells." if mode != "player" else "AI skill applies only to AI game modes."
+                       enabled=mode != "player")
+        detail = AI_DESCRIPTIONS[ai_level] if mode != "player" else "AI skill applies only to AI game modes."
         screen.blit(hint_font.render(detail, True, (200, 210, 225)), (32, 530))
-        screen.blit(hint_font.render("Medium and Hard solvers are not available yet.", True,
+        screen.blit(hint_font.render("All AI levels may guess and hit a mine.", True,
                                     (170, 180, 195)), (32, 565))
         if error:
             screen.blit(hint_font.render(error, True, (255, 140, 140)), (32, 610))
@@ -212,6 +218,8 @@ def MainGameplay(mode):
     global game_status
     clock = pygame.time.Clock()
     ai_pending = mode == "auto"
+    ai_stopped = False
+    skill_name = dict(AI_OPTIONS)[board.aiLevel]
     next_ai_move = pygame.time.get_ticks() + 600
     while True:
         for event in pygame.event.get():
@@ -251,22 +259,23 @@ def MainGameplay(mode):
             move = board.getAIMove()
             if move is None:
                 # No legal move: let the user restart or return to setup.
-                game_status = "AI has no legal moves. R: Restart | Esc: Menu"
+                ai_stopped = True
                 ai_pending = False
             else:
-                if not board.is_constructed:
-                    board.createBoard(*move)
-                else:
-                    board.dig(*move)
-                ai_pending = mode == "auto"
+                result = applyAiMove(board, move)
+                # Stop auto-play on a refused move (e.g. no flags remaining).
+                ai_stopped = result == 2
+                ai_pending = mode == "auto" and not ai_stopped
                 next_ai_move = pygame.time.get_ticks() + 600
 
         if board.state() != "Playing":
             return board.state() == "Victory"
         if mode == "player":
             game_status = "Player only"
+        elif mode == "auto" and ai_stopped:
+            game_status = "AI cannot continue. R: Restart | Esc: Menu"
         elif ai_pending:
-            game_status = "Auto-solve: Easy AI" if mode == "auto" else "AI turn: Easy"
+            game_status = f"Auto-solve: {skill_name} AI" if mode == "auto" else f"AI turn: {skill_name}"
         elif mode == "interactive":
             game_status = "Your turn: uncover a cell or place/remove a flag"
         # Clear the setup screen and previous frame before drawing gameplay.

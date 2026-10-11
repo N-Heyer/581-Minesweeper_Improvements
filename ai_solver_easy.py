@@ -27,4 +27,5 @@ def easy_mode(playerView, rows, columns):
     if len(possibleTiles) == 0:
         return None
 
-    return possibleTiles[randint(0, len(possibleTiles) - 1)]
+    row, col = possibleTiles[randint(0, len(possibleTiles) - 1)]
+    return ("dig", row, col)
