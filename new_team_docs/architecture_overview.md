@@ -1,10 +1,10 @@
 # System Architecture Overview
 
-Describes the code as it stands on the `backend-tests` branch (commit `3177710`), which merges
-`backend`, `ui_branch`, and `ai-medium-hard`. `main` does not yet have this code.
+Describes the code on the `backend-tests` branch (commit `3177710`), which merges `backend`,
+`ui_branch`, and `ai-medium-hard`.
 
 Legend: **[INHERITED]** = carried over from Project 1. **[BUILT]** = built for this project.
-**[PLANNED]** = designed, not built; update after implementation.
+Every component below is one or the other — nothing is still at the design stage.
 
 ## 1. Components
 
@@ -12,13 +12,12 @@ Legend: **[INHERITED]** = carried over from Project 1. **[BUILT]** = built for t
 |-----------|----------------|--------|
 | Game Engine | Owns board and game state; validates and applies moves; reports win/loss and a text status | [INHERITED] (extended: any board size, loss tracking, flag cap, player view, AI entry points) |
 | UI / Input | Draws the board and status; converts mouse and keyboard input into engine operations; setup menu and end screen | [INHERITED] (extended: board-size tabs, game-mode and AI-skill menu, status line) |
-| Difficulty | A `Difficulty` object holding rows, columns, and mine count; built at setup and held for the whole game | [BUILT] — `difficulty_presets.py` |
+| Difficulty — **the team's custom feature** | Selectable board difficulty: a `Difficulty` object holding rows, columns, and mine count, chosen at setup and held for the whole game | [BUILT] — `difficulty_presets.py`, with the setup tabs in `ui_display.py` |
 | AI Solver | Reads the player's view of the board and proposes one move per call at each skill level (Easy / Medium / Hard) | [BUILT] — `ai_solver_easy.py`, `ai_solver_medium.py`, `ai_solver_hard.py` |
 | AI Dispatch | Routes to the solver matching the chosen skill level | [BUILT] — `ai_interactive_mode.py` |
 | Auto-Solve | Lets the solver play the board out on its own, keeping the moves it played in a queue | [BUILT] — `ai_auto_solve_mode.py` |
 | Turn Control | Decides whether the next move comes from the player or the solver | [BUILT] — folded into the UI loop (`MainGameplay(mode)`), not a separate component |
 | Test Suite | Automated tests for the engine, the difficulty presets, and the three solvers | [BUILT] — `tests/`, 83 pytest cases |
-| Custom Feature | Placeholder until the team selects the feature | [PLANNED] |
 
 **Two separate things are both called "difficulty," so this document keeps them apart:**
 
@@ -27,6 +26,11 @@ Legend: **[INHERITED]** = carried over from Project 1. **[BUILT]** = built for t
 
 They are chosen independently at setup. A 20x20 board can be played with the Easy solver, and a
 10x10 board with the Hard one.
+
+**Board difficulty is this team's custom feature.** The three AI skill levels are the
+assignment's required work; the selectable board difficulty — three grid sizes with their own
+mine ranges, rather than the fixed 10x10 board of Project 1 — is the addition the team chose.
+It is built and in use, so no component in this document is a placeholder.
 
 ## 2. Data Flow
 
@@ -54,7 +58,7 @@ mine positions are never exposed.
 ```mermaid
 flowchart LR
     P([Player]) -->|mouse / keys| UI[UI / Input<br/>ui_display.py]
-    UI -->|size + mine count| DF[Difficulty<br/>difficulty_presets.py]
+    UI -->|size + mine count| DF[Difficulty · CUSTOM FEATURE<br/>difficulty_presets.py]
     DF -->|rows, columns, mines| GE[Game Engine<br/>minesweeper.py]
     UI -->|dig / flag / chord| GE
     GE -->|display values, state| UI
@@ -64,7 +68,6 @@ flowchart LR
     AD -->|move| GE
     GE -.->|autoSolve| AS[Auto-Solve<br/>ai_auto_solve_mode.py]
     AS -->|replays moves on| GE
-    CF[Custom Feature<br/>PLANNED] -. attaches via component interfaces .- GE
 ```
 
 Turn Control has no node of its own: it is the event loop in `MainGameplay(mode)`, which decides
@@ -96,8 +99,8 @@ moves.
 - [x] AI Solver: three levels built; behaviors documented in `difficulty_selector_uml.md`
 - [x] Turn Control: merged into the UI loop as planned
 - [x] Diagram: placeholder nodes replaced with the built structure
-- [ ] Custom Feature: not yet selected — component entry, diagram node, and data flow still to add
-- [ ] Merge `backend-tests` into `main` so this document describes the default branch
+- [x] Custom Feature: the selectable board difficulty — component entry, diagram node, and data
+      flow all documented above
 - [ ] The setup menu still labels Medium and Hard "(soon)" and refuses to select them, even
       though both solvers are built and tested. Until that is changed, only Easy is reachable
       from the UI.
