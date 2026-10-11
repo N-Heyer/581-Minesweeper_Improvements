@@ -6,7 +6,7 @@
 #              classes that queue is built from.
 # Inputs:  the board being played, aiSkill (1-3), the difficulty object the game
 #          was built with.
-# Outputs: the head Node of a queue of (row, column) moves, or None when the AI
+# Outputs: the head Node of a queue of Easy coordinates or Medium/Hard action tuples, or None when the AI
 #          had no moves. Raises ValueError on an AI level outside 1-3.
 # External sources: Claude (Anthropic) was used for bug finding, and under my
 # direction fixed enqueue adding the first move twice and changed this file to
@@ -14,7 +14,7 @@
 # Author: Jaycob Campos
 # Created: Sept 29 2026
 
-from ai_interactive_mode import getAiMoveInteractive
+from ai_interactive_mode import getAiMoveInteractive, applyAiMove
 
 # one link in the Queue below - the move it holds, and the link after it
 class Node:
@@ -57,7 +57,7 @@ class Queue:
 # the earlier ones uncovered.
 # input:  board - the Minesweeper board to play; aiSkill - which AI to use, 1-3;
 #         gameDifficultyObject - a preset exposing rows and columns
-# output: the head Node of a queue of the (row, column) moves played, or None if
+# output: the head Node of a queue of the coordinates/action tuples played, or None if
 #         the AI had no moves; raises ValueError if aiSkill is not 1, 2, or 3
 def getMovesForAutoSolve(board, aiSkill, gameDifficultyObject):
     queue = Queue()
@@ -68,14 +68,10 @@ def getMovesForAutoSolve(board, aiSkill, gameDifficultyObject):
         if move is None:
             break
 
-        action, row, col = move
-        if action == "flag":
-            if board.flag(row, col) != 0:
-                break
-        elif action == "dig":
-            if board.dig(row, col) == 2:
-                break
-
+        # Combine backend-tests' flag checks with the shared action executor.
+        result = applyAiMove(board, move)
+        if result == 2 or (move[0] == "flag" and result != 0):
+            break
         queue.enqueue(move)
 
     return queue.head

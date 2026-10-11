@@ -4,7 +4,7 @@
 #              and the AI take turns, and hands back one move per call.
 # Inputs:  playerView (grid of display() values), aiSkill (1-3), the difficulty
 #          object the game was built with.
-# Outputs: a (row, column) move, or None when the AI has none. Raises ValueError
+# Outputs: an Easy coordinate, a Medium/Hard action tuple, or None. Raises ValueError
 #          on an AI level outside 1-3.
 # External sources: Claude (Anthropic) was used for bug finding, and under my
 # direction changed this file to take a view carrying the adjacent mine counts
@@ -17,12 +17,12 @@ from ai_solver_medium import medium_mode
 from ai_solver_hard import hard_mode
 
 # Picks the AI's next single move, for the mode where the player and the AI take
-# turns. Levels 2 and 3 are not written yet.
+# turns. Easy returns a coordinate; Medium and Hard return an action and coordinate.
 # input:  playerView - the grid of display() values from getPlayerView();
 #         aiSkill - which AI to use, 1-3; gameDifficultyObject - a preset
 #         exposing rows and columns
-# output: a (row, column) move, None when no move is left (or for the levels not
-#         written yet); raises ValueError if aiSkill is not 1, 2, or 3
+# output: (row, column) for Easy, (action, row, column) for Medium/Hard,
+#         or None when no move is left; raises ValueError for an invalid skill
 def getAiMoveInteractive(playerView, aiSkill, gameDifficultyObject):
     match aiSkill:
         case 1:
@@ -42,3 +42,18 @@ def getAiMoveInteractive(playerView, aiSkill, gameDifficultyObject):
         case _:
             raise ValueError(f"unknown AI: {aiSkill}")
 
+
+# Added Oct 7, 2026 by Andrew Kruckemyer with OpenAI Codex assistance.
+def applyAiMove(board, move):
+    """Apply Easy coordinates or Medium/Hard actions; return the board status code."""
+    if len(move) == 2:
+        action = "dig"
+        row, column = move
+    else:
+        action, row, column = move
+    if action == "dig":
+        # dig() constructs the first-click opening when needed.
+        return board.dig(row, column)
+    if action == "flag":
+        return board.flag(row, column)
+    raise ValueError(f"Unknown AI action: {action}")
