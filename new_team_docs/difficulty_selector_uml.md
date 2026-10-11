@@ -7,7 +7,9 @@ The setup menu offers **two independent selections**, and both were loosely call
 in the draft. They are separate here:
 
 - **Board difficulty** — grid size and mine count, carried by a `Difficulty` object.
-- **AI skill** — which solver plays, `aiLevel` 1-3 (Easy / Medium / Hard).
+  **This is the team's custom feature.**
+- **AI skill** — which solver plays, `aiLevel` 1-3 (Easy / Medium / Hard). Required by the
+  assignment, not the custom feature.
 
 ```mermaid
 classDiagram
@@ -20,7 +22,7 @@ classDiagram
         DoSetup() tuple
         MainGameplay(mode)
     }
-    class DF["Difficulty · difficulty_presets.py"] {
+    class DF["Difficulty · CUSTOM FEATURE · difficulty_presets.py"] {
         +rows
         +columns
         +mines
@@ -56,7 +58,7 @@ classDiagram
     }
 
     note for UI "DoSetup() returns (size, mines, mode, aiLevel)"
-    note for DF "ValueError unless 1 <= mines < rows * columns"
+    note for DF "The team's custom feature. ValueError unless 1 <= mines < rows * columns"
 
     UI --> DF : builds one per game
     DF --> GE : rows, columns, mines
@@ -109,4 +111,3 @@ Mode is chosen alongside the two difficulty selections and decides who moves, no
   the UI and the rectangular `EXPERT` preset (16x30) cannot be selected.
 - There is no separate "Game Configuration" class, as the draft anticipated. The four setup
   choices are held as a plain `settings` tuple in `ui_display.py` and unpacked at game start.
-- The custom feature has not been selected, so nothing in this diagram is attributed to it.
