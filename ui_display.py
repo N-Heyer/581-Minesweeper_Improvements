@@ -10,6 +10,7 @@
 # Board size tabs added October 6, 2026 with Claude assistance: the
 # setup menu now offers 10x10 (10-20 mines), 16x16 (20-50 mines) and 20x20
 # (60-99 mines) boards, and the board, labels and click mapping scale to fit.
+# Win/loss board screens added October 11, 2026 with OpenAI Codex assistance.
 # external sources: https://www.pygame.org/docs/, Codex , Claude
 # author: Emilia Davis and eliza m 
 # improvement author: Andrew Kruckemyer
@@ -285,28 +286,51 @@ def MainGameplay(mode):
         clock.tick(60)
 
 
+def drawEndScreen(win):
+    """Keep the final board visible and put outcome/actions below it."""
+    screen.fill((0, 0, 0))
+    showBoard(screen)
+    bar_top = label_offset + board_area
+    pygame.draw.rect(screen, (18, 21, 28), (0, bar_top, screen.get_width(), bar_height))
+    color = (120, 235, 150) if win else (255, 140, 140)
+    title = font.render("Victory!" if win else "Game Over: Loss", True, color)
+    screen.blit(title, (12, bar_top + 4))
+    restart_button = pygame.Rect(290, bar_top + 6, 185, 32)
+    menu_button = pygame.Rect(485, bar_top + 6, 205, 32)
+    drawButton(restart_button, "Play again (R)", selected=True)
+    drawButton(menu_button, "Settings (Enter)")
+    detail = "All safe cells uncovered." if win else "All mines revealed."
+    text = hint_font.render(detail + "  R: Restart | Enter / Esc: Menu", True, (230, 230, 230))
+    screen.blit(text, (12, bar_top + 44))
+    return restart_button, menu_button
+
+
 def EndScreen(win):
-    running = True
-    shouldContinue = False
-    while running: # loop to run end screen
-        for event in pygame.event.get(): # i copied this from above :3
-            # ends program if user clicks X
+    """Show a frozen final board; return restart or menu without accepting moves."""
+    global game_status
+    game_status = "Victory" if win else "Game Over: Loss"
+    if not win:
+        # Reveal flagged mines too; keep all other cells in their final state.
+        board.revealAllMines()
+    clock = pygame.time.Clock()
+    while True:
+        restart_button, menu_button = drawEndScreen(win)
+        pygame.display.flip()
+        for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                # Added 9/28/2026 (Andrew Kruckemyer): close the window right away
                 pygame.quit()
                 sys.exit()
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
-                shouldContinue = True
-                running = False
-        # display end screen
-        screen.fill((0, 0, 0)) # fill screen with black
-        if win:
-            text = font.render("You win. :) | Press enter to play again.", False, (255, 255, 255)) # show win text
-        else:
-            text = font.render("You lose. :( | Press enter to play again.", False, (255, 255, 255)) # show lose text
-        screen.blit(text, ((board_size + label_size) * board_scale // 2 - text.get_width() // 2, (board_size + label_size) * board_scale // 2 - text.get_height() // 2)) # center text
-        pygame.display.flip() # update display
-    return shouldContinue
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_r:
+                    return "restart"
+                if event.key in (pygame.K_RETURN, pygame.K_ESCAPE):
+                    return "menu"
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                if restart_button.collidepoint(event.pos):
+                    return "restart"
+                if menu_button.collidepoint(event.pos):
+                    return "menu"
+        clock.tick(60)
 
 
 # Remember all settings on restart; returning to the menu allows new choices.
@@ -325,6 +349,5 @@ if __name__ == "__main__":
         if win == "menu":
             settings = None
             continue
-        if not EndScreen(win):
-            break
-        settings = None
+        if EndScreen(win) == "menu":
+            settings = None
