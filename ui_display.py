@@ -35,6 +35,7 @@ font = pygame.font.SysFont("Comic Sans MS", 8 * board_scale)
 # strip below the board that shows the R / Esc controls
 hint_font = pygame.font.SysFont("Comic Sans MS", 5 * board_scale)
 bar_height = 76  # pixels of extra window height for the hint bar
+game_status = ""  # hint-bar text; MainGameplay and EndScreen replace this
 
 # load screen with given dimensions
 # Changed 9/28/2026 (Andrew Kruckemyer, with help from Claude): window is bar_height taller
@@ -79,6 +80,36 @@ def getLabelFont(cell_px):
     return _label_font_cache[pt]
 
 
+def spriteIndex(tile):
+    """Map a display() code onto the sprite sheet. Covered (-3) is sprite 0."""
+    return tile + 3
+
+
+def rowLabel(row):
+    """Row header. The first row is 1."""
+    return str(row + 1)
+
+
+def columnLabel(col):
+    """Column header. Column 0 is A."""
+    return chr(ord("A") + col)
+
+
+def flagsRemaining():
+    """Flags the player can still place. Shown on the hint bar."""
+    return board.mines - board.flags
+
+
+def cellFromPixel(x, y):
+    """Convert a window pixel to (row, col), or None when it misses the grid."""
+    cell_px = cellSize()
+    col = (x - label_offset) // cell_px
+    row = (y - label_offset) // cell_px
+    if not (0 <= row < board.rows and 0 <= col < board.columns):
+        return None
+    return row, col
+
+
 # displays board
 def showBoard(surface):
     cell_px = cellSize()
@@ -88,16 +119,16 @@ def showBoard(surface):
         for col in range(board.columns):
             # draw sprite onto surface at given position
             tile = board.display(row, col)
-            surface.blit(sprites[tile + 3], (col * cell_px + label_offset, row * cell_px + label_offset))
+            surface.blit(sprites[spriteIndex(tile)], (col * cell_px + label_offset, row * cell_px + label_offset))
 
     # row labels 1..rows, centered beside each row (no anti-aliasing, white)
     for row in range(board.rows):
-        label = label_font.render(str(row + 1), False, (255, 255, 255))
+        label = label_font.render(rowLabel(row), False, (255, 255, 255))
         surface.blit(label, label.get_rect(center=(label_offset // 2, row * cell_px + label_offset + cell_px // 2)))
 
     # column labels A.. (A-J, A-P or A-T), centered above each column
     for col in range(board.columns):
-        label = label_font.render(chr(ord('A') + col), False, (255, 255, 255))
+        label = label_font.render(columnLabel(col), False, (255, 255, 255))
         surface.blit(label, label.get_rect(center=(col * cell_px + label_offset + cell_px // 2, label_offset // 2)))
 
     # Added 9/28/2026 (Andrew Kruckemyer, with help from Claude): controls hint bar
@@ -106,7 +137,7 @@ def showBoard(surface):
     hint = hint_font.render("R: Restart  |  Esc: Menu", False, (255, 255, 255))
     surface.blit(hint, (surface.get_width() // 2 - hint.get_width() // 2, bar_top + 8))
     # Added 9/29/2026 (Khang Phan): flag remaining counter
-    flagCount = hint_font.render("Flags: " + str(board.mines - board.flags), False, (255, 255, 255))
+    flagCount = hint_font.render("Flags: " + str(flagsRemaining()), False, (255, 255, 255))
     surface.blit(flagCount, (12, bar_top + 8))
     status = hint_font.render(game_status, True, (255, 255, 255))
     surface.blit(status, (12, bar_top + 42))
@@ -121,6 +152,40 @@ AI_DESCRIPTIONS = {
     2: "Medium uses nearby numbers to flag mines and open cells.",
     3: "Hard adds the 1-2-1 pattern to Medium's rules.",
 }
+
+
+def updateMineText(mines, character="", backspace=False):
+    """Apply one setup-menu key. The mine field holds at most two digits."""
+    if backspace:
+        return mines[:-1]
+    if character in "0123456789" and len(mines) < 2:
+        return mines + character
+    return mines
+
+
+def mineCountAccepted(text, min_mines, max_mines):
+    """True when the typed mine count is an integer inside this board size's range."""
+    return text.isdigit() and min_mines <= int(text) <= max_mines
+
+
+def statusText(mode, ai_pending, ai_stopped, skill_name):
+    """Hint-bar status for the current turn. None leaves the previous text up."""
+    if mode == "player":
+        return "Player only"
+    if mode == "auto" and ai_stopped:
+        return "AI cannot continue. R: Restart | Esc: Menu"
+    if ai_pending:
+        if mode == "auto":
+            return f"Auto-solve: {skill_name} AI"
+        return f"AI turn: {skill_name}"
+    if mode == "interactive":
+        return "Your turn: uncover a cell or place/remove a flag"
+    return None
+
+
+def outcomeStatus(win):
+    """Hint-bar text once the game is over. Matches Minesweeper.state()."""
+    return "Victory" if win else "Game Over: Loss"
 
 
 def drawButton(rect, label, selected=False, enabled=True):
@@ -155,11 +220,13 @@ def DoSetup():
                 if event.key == pygame.K_RETURN:
                     start_requested = True
                 elif event.key == pygame.K_BACKSPACE:
-                    mines = mines[:-1]
+                    mines = updateMineText(mines, backspace=True)
                     error = ""
-                elif event.unicode in "0123456789" and event.unicode and len(mines) < 2:
-                    mines += event.unicode
-                    error = ""
+                elif event.unicode:
+                    updated = updateMineText(mines, character=event.unicode)
+                    if updated != mines:
+                        mines = updated
+                        error = ""
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 # Switching board size resets the mine count to that size's default
                 for i, rect in enumerate(size_buttons):
@@ -177,7 +244,7 @@ def DoSetup():
                 start_requested = start_button.collidepoint(event.pos)
             if start_requested:
                 size, min_mines, max_mines, _ = BOARD_SIZES[size_index]
-                if mines.isdigit() and min_mines <= int(mines) <= max_mines:
+                if mineCountAccepted(mines, min_mines, max_mines):
                     return size, int(mines), mode, ai_level
                 error = f"Enter a mine count from {min_mines} to {max_mines} for {size}x{size}."
 
@@ -236,12 +303,11 @@ def MainGameplay(mode):
             if (event.type != pygame.MOUSEBUTTONDOWN or mode == "auto"
                     or ai_pending or board.state() != "Playing"):
                 continue
-            # Convert the click to a cell using the current board's cell size
-            cell_px = cellSize()
-            col = (event.pos[0] - label_offset) // cell_px
-            row = (event.pos[1] - label_offset) // cell_px
-            if not (0 <= row < board.rows and 0 <= col < board.columns):
+            # Clicks on the row/column labels or the hint bar are ignored.
+            cell = cellFromPixel(event.pos[0], event.pos[1])
+            if cell is None:
                 continue
+            row, col = cell
             before = board.getPlayerView()
             if event.button == 1:
                 # The backend clears pre-game flags and builds the first opening.
@@ -271,14 +337,9 @@ def MainGameplay(mode):
 
         if board.state() != "Playing":
             return board.state() == "Victory"
-        if mode == "player":
-            game_status = "Player only"
-        elif mode == "auto" and ai_stopped:
-            game_status = "AI cannot continue. R: Restart | Esc: Menu"
-        elif ai_pending:
-            game_status = f"Auto-solve: {skill_name} AI" if mode == "auto" else f"AI turn: {skill_name}"
-        elif mode == "interactive":
-            game_status = "Your turn: uncover a cell or place/remove a flag"
+        status = statusText(mode, ai_pending, ai_stopped, skill_name)
+        if status is not None:
+            game_status = status
         # Clear the setup screen and previous frame before drawing gameplay.
         screen.fill((0, 0, 0))
         showBoard(screen)
@@ -308,7 +369,7 @@ def drawEndScreen(win):
 def EndScreen(win):
     """Show a frozen final board; return restart or menu without accepting moves."""
     global game_status
-    game_status = "Victory" if win else "Game Over: Loss"
+    game_status = outcomeStatus(win)
     if not win:
         # Reveal flagged mines too; keep all other cells in their final state.
         board.revealAllMines()
