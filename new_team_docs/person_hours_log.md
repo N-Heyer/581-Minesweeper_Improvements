@@ -13,3 +13,4 @@
 | 10/10 | Khang  | Finish medium, hard AI solver tests, bug fixing | Coding | 2 |
 | 10/10 | Andrew  | Add medium and hard ai UI functionality | Coding | 1 |
 | 10/11 | Andrew  | Changed end screen to show board/mines | Coding | 1 |
+| 10/11 | Khang  | Update README, E2E testing, merge tests | Testing + Doc | 0.5 |
